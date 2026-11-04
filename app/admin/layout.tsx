@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AiFillProduct } from "react-icons/ai";
 import { FaUser } from "react-icons/fa";
 import { MdOutlineSettings, MdSpaceDashboard } from "react-icons/md";
+import { logoutAction } from "../(auth)/action";
 
 export default function AdminLayout({
     children,
@@ -15,11 +16,32 @@ export default function AdminLayout({
 }) {
     const router = useRouter();
 
+    const [user, setUser] = React.useState<{
+        id: string;
+        firstname: string;
+        lastname: string;
+        username: string;
+        role: string;
+    } | null>(null);
+
+    React.useEffect(() => {
+        const match = document.cookie
+            .split("; ")
+            .find((row) => row.startsWith("user="));
+        if (match) {
+            try {
+                const userData = JSON.parse(decodeURIComponent(match.split("=")[1]));
+                setUser(userData);
+            } catch {}
+        }
+    }, []);
+
     // Hàm xử lý đăng xuất
-    const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
+    const handleLogout = async () => {
+        // localStorage.removeItem("token");
+        // localStorage.removeItem("user");
+        // router.push("/login");
+        await logoutAction();
     };
 
     return (
@@ -56,14 +78,16 @@ export default function AdminLayout({
                             <span className="text-lg"><AiFillProduct size={20} /></span>
                             <span>Products</span>
                         </Link>
-                        <Link
-                            key="/admin/users"
-                            href="/admin/users"
-                            className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        >
-                            <span className="text-lg"><FaUser size={20} /></span>
-                            <span>Users</span>
-                        </Link>
+                        {user?.role === "ADMIN" && (
+                            <Link
+                                key="/admin/users"
+                                href="/admin/users"
+                                className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                                <span className="text-lg"><FaUser size={20} /></span>
+                                <span>Users</span>
+                            </Link>
+                        )}
                         <Link
                             key="/admin/settings"
                             href="/admin/settings"
@@ -96,11 +120,15 @@ export default function AdminLayout({
                     {/* User Profile tóm tắt */}
                     <div className="flex items-center gap-3">
                         <div className="text-right">
-                            <div className="text-sm font-medium">Emily Johnson</div>
-                            <div className="text-xs text-zinc-500">emilys@dummyjson.com</div>
+                            <div className="text-sm font-medium">
+                                {user ? `${user.firstname} ${user.lastname}` : "Đang tải..."}
+                            </div>
+                            <div className="text-xs text-zinc-500">
+                                {user ? `@${user.username} • Role: ${user.role} (ID: ${user.id.slice(-4)})` : ""}
+                            </div>
                         </div>
                         <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800 border flex items-center justify-center font-bold">
-                            EJ
+                            {user ? user.firstname.charAt(0).toUpperCase() : "U"}
                         </div>
                     </div>
                 </header>

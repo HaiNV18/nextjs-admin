@@ -2,8 +2,10 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import bcrypt from "bcryptjs";
+import { getDb } from "@/lib/mongodb";
+import { signAccessToken, signRefreshToken, UserPayload } from "@/lib/jwt";
 
-// prevState dùng để hứng state trước đó khi kết hợp với useActionState
 export async function loginAction(prevState: any, formData: FormData) {
     const username = formData.get("username") as string;
     const password = formData.get("password") as string;
@@ -11,51 +13,72 @@ export async function loginAction(prevState: any, formData: FormData) {
     let isSuccess = false;
 
     try {
-        const res = await fetch("https://dummyjson.com/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                username,
-                password,
-                expiresInMins: 60,
-            }),
-        });
+        const db = await getDb();
+        const account = await db.collection("accounts").findOne({ username });
 
-        const data = await res.json();
-
-        if (!res.ok) {
-            return { error: data.message || "Tài khoản hoặc mật khẩu không chính xác" };
+        if (!account) {
+            return { error: "Tài khoản hoặc mật khẩu không chính xác" };
         }
 
-        // Lưu token vào HttpOnly Cookie
-        // Cách này an toàn hơn localStorage
-        // Lưu ý Next.js 16: cookies() là hàm bất đồng bộ (phải có await)
+        const isPasswordValid =
+            account.password.startsWith("$2")
+                ? await bcrypt.compare(password, account.password)
+                : password === account.password;
+
+        if (!isPasswordValid) {
+            return { error: "Tài khoản hoặc mật khẩu không chính xác" };
+        }
+
+        const userPayload: UserPayload = {
+            id: account._id.toString(),
+            firstname: account.firstname,
+            lastname: account.lastname,
+            username: account.username,
+            role: account.role,
+        };
+
+        const accessToken = await signAccessToken(userPayload);
+        const refreshToken = await signRefreshToken(userPayload);
+
         const cookieStore = await cookies();
-        cookieStore.set("token", data.accessToken, {
+
+        // Save Access Token
+        cookieStore.set("token", accessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            maxAge: 60 * 60, // 1 giờ
+            maxAge: 60, // 1 phút
             path: "/",
         });
 
-        // Lưu thêm thông tin user cơ bản
-        cookieStore.set("user", JSON.stringify({
-            id: data.id,
-            username: data.username,
-            firstName: data.firstName,
-            lastName: data.lastName,
-        }), {
+        // Save Refresh Token
+        cookieStore.set("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 7 * 24 * 60 * 60,
             path: "/",
-            maxAge: 60 * 60,
+        });
+
+        // Save user information for Client/Server to read and display the interface
+        cookieStore.set("user", JSON.stringify(userPayload), {
+            path: "/",
+            maxAge: 7 * 24 * 60 * 60,
         });
 
         isSuccess = true;
-    } catch (error: any) {
+    } catch (error) {
+        console.error(error);
         return { error: "Không thể kết nối đến máy chủ. Vui lòng thử lại!" };
     }
 
-    // Call redirect() ngoài try-catch
     if (isSuccess) {
         redirect("/admin/dashboard");
     }
+}
+
+export async function logoutAction() {
+    const cookieStore = await cookies();
+    cookieStore.delete("token");
+    cookieStore.delete("refreshToken");
+    cookieStore.delete("user");
+    redirect("/login");
 }
