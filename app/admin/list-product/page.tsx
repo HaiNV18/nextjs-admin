@@ -1,9 +1,11 @@
 import { getDb } from "@/lib/mongodb";
 import Link from "next/link";
+import { connection } from "next/server";
 
 export const instant = false; // Cho phép truy vấn DB động không chặn static prerender trong Next.js 16
 
 export default async function ListProductPage() {
+    await connection();
     const db = await getDb();
     const listProduct = await db.collection("products").find({}).toArray();
 

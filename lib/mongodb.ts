@@ -1,33 +1,23 @@
 import { MongoClient, Db } from "mongodb";
 
-const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB;
-
-if (!uri) {
-    throw new Error("Vui lòng cấu hình biến môi trường MONGODB_URI trong .env.local");
-}
-
-// Giữ kết nối trong biến global ở môi trường development để tránh tạo lại khi Hot Reload
-let globalWithMongo = global as typeof globalThis & {
+// Giữ kết nối trong biến global để tránh tạo lại nhiều lần
+const globalWithMongo = global as typeof globalThis & {
     _mongoClientPromise?: Promise<MongoClient>;
 };
 
-let clientPromise: Promise<MongoClient>;
+export async function getDb(): Promise<Db> {
+    const uri = process.env.MONGODB_URI;
+    const dbName = process.env.MONGODB_DB;
 
-if (process.env.NODE_ENV === "development") {
+    if (!uri) {
+        throw new Error("Vui lòng cấu hình biến môi trường MONGODB_URI trong .env.local hoặc trên Render");
+    }
+
     if (!globalWithMongo._mongoClientPromise) {
         const client = new MongoClient(uri);
         globalWithMongo._mongoClientPromise = client.connect();
     }
-    clientPromise = globalWithMongo._mongoClientPromise;
-} else {
-    const client = new MongoClient(uri);
-    clientPromise = client.connect();
-}
 
-export async function getDb(): Promise<Db> {
-    const client = await clientPromise;
+    const client = await globalWithMongo._mongoClientPromise;
     return client.db(dbName);
 }
-
-export default clientPromise;
